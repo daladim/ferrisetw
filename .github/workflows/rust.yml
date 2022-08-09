@@ -12,7 +12,6 @@ env:
 jobs:
   build-and-run:
     runs-on: windows-2022
-
     steps:
     - uses: actions/checkout@v3
     - uses: actions-rs/toolchain@v1
@@ -26,6 +25,16 @@ jobs:
     - uses: actions-rs/cargo@v1
       with:
         command: test
-    - uses: actions-rs/cargo@v1
+
+  clippy:
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions-rs/toolchain@v1
       with:
-        command: clippy
+        profile: minimal
+        toolchain: stable
+        override: true
+    - uses: actions-rs/clippy-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
