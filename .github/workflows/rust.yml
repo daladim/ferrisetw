@@ -26,7 +26,7 @@ jobs:
       with:
         command: test
 
-  clippy:
+  clippy-on-diffs:
     runs-on: windows-2022
     steps:
     - uses: actions/checkout@v3
@@ -38,3 +38,16 @@ jobs:
     - uses: actions-rs/clippy-check@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
+
+  clippy-on-codebase:
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+    - uses: actions-rs/cargo@v1
+      with:
+        command: clippy -D warning
