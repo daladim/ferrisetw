@@ -119,6 +119,7 @@ impl<'a> Parser<'a> {
     }
 
     // TODO: Find a cleaner way to do this, not very happy with it rn
+    #[allow(clippy::len_zero)]
     fn find_property_size(&self, property: &Property) -> ParserResult<usize> {
         // There are several cases
         //  * regular case, where property.len() directly makes sense
@@ -129,7 +130,7 @@ impl<'a> Parser<'a> {
         if property
             .flags
             .intersects(PropertyFlags::PROPERTY_PARAM_LENGTH) == false
-            && property.len() > 0
+            && (property.len() > 0)
         {
             let size;
             if property.in_type() != TdhInType::InTypePointer {
@@ -171,7 +172,7 @@ impl<'a> Parser<'a> {
                 None => return Err(ParserError::PropertyError("Index out of bounds".to_owned())),
             };
 
-            let prop_size = self.find_property_size(&curr_prop)?;
+            let prop_size = self.find_property_size(curr_prop)?;
 
             if self.buffer.len() < prop_size {
                 return Err(ParserError::PropertyError(

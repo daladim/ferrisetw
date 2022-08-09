@@ -58,10 +58,12 @@ pub(crate) fn schema_from_tdh(mut event: EventRecord) -> TdhNativeResult<TraceEv
 pub(crate) fn property_size(mut event: EventRecord, name: &str) -> TdhNativeResult<u32> {
     let mut property_size = 0;
 
-    let mut desc = Etw::PROPERTY_DATA_DESCRIPTOR::default();
-    desc.ArrayIndex = u32::MAX;
-    let name = name.as_utf16();
-    desc.PropertyName = name.as_ptr() as u64;
+    let name = name.into_utf16();
+    let mut desc = Etw::PROPERTY_DATA_DESCRIPTOR{
+        ArrayIndex: u32::MAX,
+        PropertyName: name.as_ptr() as u64,
+        ..Default::default()
+    };
 
     unsafe {
         let status = Etw::TdhGetPropertySize(

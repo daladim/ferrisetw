@@ -63,7 +63,7 @@ impl NativeEtw {
     }
 
     pub(crate) fn session_handle(&self) -> TraceHandle {
-        self.session_handle.clone()
+        self.session_handle
     }
 
     // Not a big fan of this...
@@ -82,14 +82,14 @@ impl NativeEtw {
         if self.session_handle == INVALID_TRACE_HANDLE {
             return Err(EvntraceNativeError::InvalidHandle);
         }
-        Ok(self.process()?)
+        self.process()
     }
 
     pub(crate) fn open(
         &mut self,
         trace_data: &TraceData,
     ) -> EvntraceNativeResult<EventTraceLogfile> {
-        Ok(self.open_trace(trace_data)?)
+        self.open_trace(trace_data)
     }
 
     pub(crate) fn stop(&mut self, trace_data: &TraceData) -> EvntraceNativeResult<()> {
@@ -103,7 +103,7 @@ impl NativeEtw {
             return Err(EvntraceNativeError::InvalidHandle);
         }
 
-        let clone_handle = self.session_handle.clone();
+        let mut clone_handle = self.session_handle;
         std::thread::spawn(move || {
             let mut now = FILETIME::default();
             unsafe {
