@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-and-run:
+  build-and-test:
     runs-on: windows-2022
     steps:
     - uses: actions/checkout@v3
@@ -49,5 +49,7 @@ jobs:
         toolchain: stable
         override: true
     - uses: actions-rs/cargo@v1
+      continue-on-error: true
       with:
-        command: clippy -D warning
+        command: clippy
+        args: -D warning
