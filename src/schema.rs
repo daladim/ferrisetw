@@ -12,6 +12,8 @@ pub mod extended_data;
 use extended_data::EventHeaderExtendedDataItem;
 
 /// Schema module errors
+///
+/// See also [`crate::stuff`]
 #[derive(Debug)]
 pub enum SchemaError {
     /// Represents a Parser error
