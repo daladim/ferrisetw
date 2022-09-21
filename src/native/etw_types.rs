@@ -94,7 +94,7 @@ impl From<ProcessTraceMode> for u32 {
 
 /// Newtype wrapper over an [EVENT_TRACE_PROPERTIES]
 ///
-/// [EVENT_TRACE_PROPERTIES]: https://microsoft.github.io/windows-docs-rs/doc/bindings/Windows/Win32/Etw/struct.EVENT_TRACE_PROPERTIES.html
+/// [EVENT_TRACE_PROPERTIES]: https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/System/Diagnostics/Etw/struct.EVENT_TRACE_PROPERTIES.html
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct EventTraceProperties(Etw::EVENT_TRACE_PROPERTIES);
@@ -186,7 +186,7 @@ impl Default for TraceInfo {
 
 /// Newtype wrapper over an [EVENT_TRACE_LOGFILEA]
 ///
-/// [EVENT_TRACE_LOGFILEA]: https://microsoft.github.io/windows-docs-rs/doc/bindings/Windows/Win32/Etw/struct.EVENT_TRACE_LOGFILEA.html
+/// [EVENT_TRACE_LOGFILEA]: https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/System/Diagnostics/Etw/struct.EVENT_TRACE_LOGFILEA.html
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct EventTraceLogfile<'tracedata> {
@@ -230,7 +230,7 @@ impl<'tracedata> Default for EventTraceLogfile<'tracedata> {
 
 /// Newtype wrapper over an [ENABLE_TRACE_PARAMETERS]
 ///
-/// [ENABLE_TRACE_PARAMETERS]: https://microsoft.github.io/windows-docs-rs/doc/bindings/Windows/Win32/Etw/struct.ENABLE_TRACE_PARAMETERS.html
+/// [ENABLE_TRACE_PARAMETERS]: https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/System/Diagnostics/Etw/struct.ENABLE_TRACE_PARAMETERS.html
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct EnableTraceParameters<'filters>{
