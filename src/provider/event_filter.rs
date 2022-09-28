@@ -6,6 +6,8 @@ use windows::Win32::System::Diagnostics::Etw::{EVENT_FILTER_DESCRIPTOR, EVENT_FI
 use windows::Win32::System::Diagnostics::Etw::{MAX_EVENT_FILTER_EVENT_ID_COUNT, MAX_EVENT_FILTER_PID_COUNT};
 
 /// Specifies how this provider will filter its events
+///
+/// Some filters are not effective prior to Windows 8.1 ([source](https://learn.microsoft.com/en-us/windows/win32/api/evntprov/ns-evntprov-event_filter_descriptor#remarks))
 pub enum EventFilter {
     /// Filter by PID.
     /// This is only effective on kernel mode logger session.
