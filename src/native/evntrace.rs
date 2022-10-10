@@ -5,6 +5,8 @@
 //!
 //! This module shouldn't be accessed directly. Modules from the crate level provide a safe API to interact
 //! with the crate
+use std::panic::AssertUnwindSafe;
+
 use windows::core::{GUID, PCSTR};
 use windows::Win32::Foundation::FILETIME;
 use windows::Win32::System::Diagnostics::Etw;
@@ -41,6 +43,7 @@ impl From<std::io::Error> for EvntraceNativeError {
 pub(crate) type EvntraceNativeResult<T> = Result<T, EvntraceNativeError>;
 
 extern "system" fn trace_callback_thunk(p_record: *mut Etw::EVENT_RECORD) {
+    match std::panic::catch_unwind(AssertUnwindSafe(|| {
     let record_from_ptr = unsafe {
         // Safety: lifetime is valid at least until the end of the callback. A correct lifetime will be attached when we pass the reference to the child function
         EventRecord::from_ptr(p_record)
@@ -57,6 +60,13 @@ extern "system" fn trace_callback_thunk(p_record: *mut Etw::EVENT_RECORD) {
         };
         if let Some(user_context) = user_context {
             user_context.on_event(event_record);
+        }
+    }
+    })) {
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("UNIMPLEMENTED PANIC: {e:?}");
+            std::process::exit(1);
         }
     }
 }
