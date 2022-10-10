@@ -38,7 +38,7 @@ fn dns_etw_callback(
 }
 
 fn parse_etw_event(schema: &Schema, record: &EventRecord) {
-    let mut parser = Parser::create(record, schema);
+    let parser = Parser::create(record, schema);
     // let event_timestamp = filetime_to_datetime(schema.timestamp());
 
     let requested_fqdn: Option<String> = parser
