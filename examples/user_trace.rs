@@ -33,12 +33,13 @@ fn main() {
         .add_callback(process_callback)
         .build();
 
-    let mut trace = UserTrace::new()
+    UserTrace::new()
         .named(String::from("MyProvider"))
         .enable(process_provider)
-        .start()
+        .start_and_process()
         .unwrap();
 
     std::thread::sleep(Duration::new(20, 0));
-    trace.stop();
+
+    // UserTrace will be dropped (and stopped) here
 }

@@ -50,7 +50,7 @@
 //! use ferrisetw::parser::Parser;
 //! use ferrisetw::parser::TryParse;
 //! use ferrisetw::provider::Provider;
-//! use ferrisetw::trace::{UserTrace, TraceTrait, TraceBaseTrait};
+//! use ferrisetw::trace::{UserTrace, TraceTrait};
 //!
 //! fn process_callback(record: &EventRecord, schema_locator: &SchemaLocator) {
 //!     // Within the callback we first locate the proper Schema for the event
@@ -89,7 +89,7 @@
 //!         .named(String::from("MyProvider"))
 //!         .enable(process_provider)
 //!         // .enable(other_provider) // it is possible to enable multiple providers on the same trace
-//!         .start()
+//!         .start_and_process()
 //!         .unwrap();
 //!
 //!     std::thread::sleep(std::time::Duration::from_secs(3));

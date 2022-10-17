@@ -6,7 +6,7 @@ use std::process::Command;
 use ferrisetw::provider::{Provider, EventFilter};
 use ferrisetw::native::etw_types::EventRecord;
 use ferrisetw::schema_locator::SchemaLocator;
-use ferrisetw::trace::{UserTrace, TraceBaseTrait};
+use ferrisetw::trace::UserTrace;
 use ferrisetw::parser::{Parser, TryParse};
 
 mod utils;
@@ -45,14 +45,15 @@ fn simple_user_dns_trace() {
         })
         .build();
 
-    let mut _dns_trace = UserTrace::new()
+    let dns_trace = UserTrace::new()
         .enable(dns_provider)
-        .start()
+        .start_and_process()
         .unwrap();
 
     generate_dns_events();
 
     passed.assert_passed();
+    dns_trace.stop().unwrap();
     println!("simple_user_dns_trace passed");
 }
 
@@ -77,15 +78,19 @@ fn test_event_id_filter() {
         })
         .build();
 
-    let mut _dns_trace = UserTrace::new()
+    let _trace = UserTrace::new()
+        .named(String::from("My Ütf-8 tråce nme, that has quite a løøøøøøøøøøøøøøøøøøøøøng name, 😎 a very λονɣ name indeed (which is even longer than the max 1024 characters). My Ütf-8 tråce nme, that has quite a løøøøøøøøøøøøøøøøøøøøøng name, 😎 a very λονɣ name indeed (which is even longer than the max 1024 characters). My Ütf-8 tråce nme, that has quite a løøøøøøøøøøøøøøøøøøøøøng name, 😎 a very λονɣ name indeed (which is even longer than the max 1024 characters). My Ütf-8 tråce nme, that has quite a løøøøøøøøøøøøøøøøøøøøøng name, 😎 a very λονɣ name indeed (which is even longer than the max 1024 characters). My Ütf-8 tråce nme, that has quite a løøøøøøøøøøøøøøøøøøøøøng name, 😎 a very λονɣ name indeed (which is even longer than the max 1024 characters). My Ütf-8 tråce nme, that has quite a løøøøøøøøøøøøøøøøøøøøøng name, 😎 a very λονɣ name indeed (which is even longer than the max 1024 characters). My Ütf-8 tråce nme, that has quite a løøøøøøøøøøøøøøøøøøøøøng name, 😎 a very λονɣ name indeed (which is even longer than the max 1024 characters). My Ütf-8 tråce nme, that has quite a løøøøøøøøøøøøøøøøøøøøøng name, 😎 a very λονɣ name indeed (which is even longer than the max 1024 characters). My Ütf-8 tråce nme, that has quite a løøøøøøøøøøøøøøøøøøøøøng name, 😎 a very λονɣ name indeed (which is even longer than the max 1024 characters)."))
         .enable(dns_provider)
-        .start()
+        .start_and_process()
         .unwrap();
 
     generate_dns_events();
 
     passed1.assert_passed();
     passed2.assert_passed();
+    // Not calling .stop() here, let's just rely on the `impl Drop`
+
+    // TODO: assert logman query no longer show it?
     println!("test_event_id_filter passed");
 }
 
