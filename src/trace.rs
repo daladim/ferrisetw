@@ -2,6 +2,7 @@
 //!
 //! Provides both a Kernel and User trace that allows to start an ETW session
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use super::traits::*;
 use crate::native::etw_types::EventRecord;
@@ -250,7 +251,7 @@ impl UserTraceBuilder {
     /// You'll still have to call [`process`] to start receiving events.<br/>
     /// Alternatively, you can call the convenience method [`start_and_process`], that also spawns a thread to call `process` on.
     pub fn start(self) -> TraceResult<UserTrace> {
-        let callback_data = Box::new(self.callback_data);
+        let callback_data = Box::new(Arc::new(self.callback_data));
         let mut etw = evntrace::NativeEtw::start::<UserTrace>(
             &self.name,
             &self.properties,
@@ -314,7 +315,7 @@ impl KernelTraceBuilder {
     //
     // name if build? start?
     pub fn start(self) -> TraceResult<KernelTrace> {
-        let callback_data = Box::new(self.callback_data);
+        let callback_data = Box::new(Arc::new(self.callback_data));
         let mut etw = evntrace::NativeEtw::start::<KernelTrace>(
             &self.name,
             &self.properties,

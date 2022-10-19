@@ -57,7 +57,7 @@ extern "system" fn trace_callback_thunk(p_record: *mut Etw::EVENT_RECORD) {
     };
 
     if let Some(event_record) = record_from_ptr {
-        let p_user_context = event_record.user_context().cast::<CallbackData>();
+        let p_user_context = event_record.user_context().cast::<Arc<CallbackData>>();
         let user_context = unsafe {
             // Safety:
             //  * the API of this create guarantees this points to a `TraceData` already created
@@ -66,7 +66,10 @@ extern "system" fn trace_callback_thunk(p_record: *mut Etw::EVENT_RECORD) {
             p_user_context.as_ref()
         };
         if let Some(user_context) = user_context {
-            user_context.on_event(event_record);
+            // The UserContext is owned by the `NativeEtw` object. When it is dropped, so will the UserContext.
+            // We clone it now, so that the original Arc can be safely dropped at all times, but the callback data (including the closure captured context) will still be alive until the callback ends.
+            let cloned_arc = Arc::clone(user_context);
+            cloned_arc.on_event(event_record);
         }
     }
     })) {
@@ -120,7 +123,7 @@ pub(crate) struct NativeEtw {
     registration_handle: Option<TraceHandle>,
 
     /// Handle used by OpenTrace, ProcessTrace, CloseTrace
-    subscription: Option<(TraceHandle, Box<CallbackData>)>,
+    subscription: Option<(TraceHandle, Box<Arc<CallbackData>>)>,
 }
 
 impl std::fmt::Debug for NativeEtw {
@@ -190,7 +193,7 @@ impl NativeEtw {
     /// Subscribe to a started trace
     ///
     /// Microsoft calls this "opening" the trace (and this calls `OpenTraceW`)
-    pub fn open(&mut self, trace_name: &str, callback_data: Box<CallbackData>) -> EvntraceNativeResult<()> {
+    pub fn open(&mut self, trace_name: &str, callback_data: Box<Arc<CallbackData>>) -> EvntraceNativeResult<()> {
         if self.session_handle().is_some() {
             // That's probably possible to get multiple handles to the same trace, by opening them multiple times.
             // But that's left as a future TODO. Making things right and safe is difficult enough with a single opening of the trace already.
@@ -217,7 +220,7 @@ impl NativeEtw {
     }
 
     /// Attach a provider to this trace
-    pub fn enable_provider(&mut self, provider: &Provider, parameters: &EnableTraceParameters) -> EvntraceNativeResult<()> {
+    pub fn enable_provider(&mut self, provider: &Provider) -> EvntraceNativeResult<()> {
         match self.registration_handle() {
             None => Err(EvntraceNativeError::InvalidHandle),
             Some(registration_handle) => {
