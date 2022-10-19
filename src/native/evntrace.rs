@@ -50,7 +50,8 @@ extern "system" fn trace_callback_thunk(p_record: *mut Etw::EVENT_RECORD) {
         let p_user_context = event_record.user_context().cast::<TraceData>();
         let user_context = unsafe {
             // Safety:
-            //  * the API of this create guarantees this points to a valid `TraceData`
+            //  * the API of this create guarantees this points to a `TraceData` already created
+            //  * TODO: the API of this create guarantees this `TraceData` has not been dropped
             //  * TODO: the API of this crate does not guarantee this `TraceData` is not mutated during the trace (e.g. modifying the list of providers)
             p_user_context.as_ref()
         };
@@ -166,7 +167,17 @@ impl NativeEtw {
     fn open_trace<'a>(&mut self, trace_data: &'a Box<TraceData>) -> EvntraceNativeResult<EventTraceLogfile<'a>> {
         let mut log_file = EventTraceLogfile::create(trace_data, trace_callback_thunk);
 
-        self.session_handle = unsafe { Etw::OpenTraceA(log_file.as_mut_ptr()) };
+        self.session_handle = unsafe {
+            // This function modifies the data pointed to by log_file.
+            // This is fine because `as_mut_ptr()` takes a `&mut self`, and its call is wraps the call to `OpenTraceA`.
+            //
+            // > On success, OpenTrace will update the structure with information from the opened file or session.
+            // https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-opentracea
+            Etw::OpenTraceA(log_file.as_mut_ptr())
+        };
+
+        // TODO: Error-signalling error codes depend on the version of Windows and the platform
+        // https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-opentracew#return-value
 
         if self.session_handle == INVALID_TRACE_HANDLE {
             return Err(EvntraceNativeError::IoError(std::io::Error::last_os_error()));
@@ -188,13 +199,14 @@ impl NativeEtw {
             return Err(EvntraceNativeError::InvalidHandle);
         }
 
-        unsafe {
-            let status = Etw::CloseTrace(self.session_handle);
-            if status != 0 && status != ERROR_CTX_CLOSE_PENDING.0 {
-                return Err(EvntraceNativeError::IoError(
-                    std::io::Error::from_raw_os_error(status as i32),
-                ));
-            }
+        let status = unsafe {
+            // Safety: the handle is valid
+            Etw::CloseTrace(self.session_handle)
+        };
+        if status != 0 && status != ERROR_CTX_CLOSE_PENDING.0 {
+            return Err(EvntraceNativeError::IoError(
+                std::io::Error::from_raw_os_error(status as i32),
+            ));
         }
 
         self.session_handle = INVALID_TRACE_HANDLE;
@@ -206,19 +218,21 @@ impl NativeEtw {
         trace_data: &TraceData,
         control_code: EvenTraceControl,
     ) -> EvntraceNativeResult<()> {
-        unsafe {
-            let status = Etw::ControlTraceA(
+        let status = unsafe {
+            // Safety:
+            //  * depending on the control code, the `Properties` can be mutated
+            Etw::ControlTraceA(
                 0,
                 PCSTR::from_raw(trace_data.name.as_ptr()),
                 &mut *self.info.properties,
                 control_code,
-            );
+            )
+        };
 
-            if status != 0 && status != ERROR_WMI_INSTANCE_NOT_FOUND.0 {
-                return Err(EvntraceNativeError::IoError(
-                    std::io::Error::from_raw_os_error(status as i32),
-                ));
-            }
+        if status != 0 && status != ERROR_WMI_INSTANCE_NOT_FOUND.0 {
+            return Err(EvntraceNativeError::IoError(
+                std::io::Error::from_raw_os_error(status as i32),
+            ));
         }
 
         Ok(())
