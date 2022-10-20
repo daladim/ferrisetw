@@ -81,21 +81,21 @@ extern "system" fn trace_callback_thunk(p_record: *mut Etw::EVENT_RECORD) {
     }
 }
 
-fn filter_invalid_session_handles(h: TraceHandle) -> Option<TraceHandle> {
+fn filter_invalid_trace_handles(h: TraceHandle) -> Option<TraceHandle> {
     // See https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-opentracew#return-value
     // We're conservative and we always filter out u32::MAX, although it could be valid on 64-bit setups.
     // But it turns out runtime detection of the current OS bitness is not that easy. Plus, it is not clear whether this depends on how the architecture the binary is compiled for, or the actual OS architecture.
-    if h == INVALID_TRACE_HANDLE || h == u64::MAX || h == u32::MAX as u64 {
+    if h == Etw::PROCESSTRACE_HANDLE(u64::MAX) || h == Etw::PROCESSTRACE_HANDLE(u32::MAX as u64) {
         None
     } else {
         Some(h)
     }
 }
 
-fn filter_invalid_registration_handles(h: TraceHandle) -> Option<TraceHandle> {
+fn filter_invalid_control_handles(h: ControlHandle) -> Option<ControlHandle> {
     // The session handle is 0 if the handle is not valid.
     // (https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-starttracew)
-    if h == 0 {
+    if h == Etw::CONTROLTRACE_HANDLE(0) {
         None
     } else {
         Some(h)
@@ -120,7 +120,7 @@ fn filter_invalid_registration_handles(h: TraceHandle) -> Option<TraceHandle> {
 pub(crate) struct NativeEtw {
     info: EventTraceProperties,
     /// Handle used by StartTrace, ControlTrace
-    registration_handle: Option<TraceHandle>,
+    control_handle: Option<ControlHandle>,
 
     /// Handle used by OpenTrace, ProcessTrace, CloseTrace
     subscription: Option<(TraceHandle, Box<Arc<CallbackData>>)>,
@@ -145,7 +145,7 @@ impl NativeEtw {
     {
         let mut info = EventTraceProperties::new::<T>(trace_name, properties, callback_data.provider_flags::<T>());
 
-        let mut registration_handle = TraceHandle::default();
+        let mut control_handle = ControlHandle::default();
         let status = unsafe {
             // Safety:
             //  * first argument points to a valid and allocated address (this is an output and will be modified)
@@ -153,40 +153,40 @@ impl NativeEtw {
             //  * third argument is a valid, allocated EVENT_TRACE_PROPERTIES (and will be mutated)
             //  * Note: the size of the string (that will be overwritten to itself) ends with a null widechar before the end of its buffer (see EventTraceProperties::new())
             Etw::StartTraceW(
-                &mut registration_handle,
+                &mut control_handle,
                 PCWSTR::from_raw(info.trace_name_array().as_ptr()),
                 info.as_mut_ptr(),
             )
         };
 
-        if status == ERROR_ALREADY_EXISTS.0 {
+        if status == ERROR_ALREADY_EXISTS {
             return Err(EvntraceNativeError::AlreadyExist);
-        } else if status != 0 {
+        } else if status != ERROR_SUCCESS {
             return Err(EvntraceNativeError::IoError(
-                std::io::Error::from_raw_os_error(status as i32),
+                std::io::Error::from_raw_os_error(status.0 as i32),
             ));
         }
 
-        let registration_handle = filter_invalid_registration_handles(registration_handle);
-        if registration_handle.is_none() {
+        let control_handle = filter_invalid_control_handles(control_handle);
+        if control_handle.is_none() {
             Err(EvntraceNativeError::InvalidHandle)
         } else {
             Ok(Self {
                 info,
-                registration_handle,
+                control_handle,
                 subscription: None, // Will be populated when calling OpenTrace
             })
         }
     }
 
-    /// Returns session handle if is is valid, None otherwise
-    fn session_handle(&self) -> Option<TraceHandle> {
-        self.subscription.as_ref().and_then(|s| filter_invalid_session_handles(s.0))
+    /// Returns the current trace handle if is is valid, None otherwise
+    fn trace_handle(&self) -> Option<TraceHandle> {
+        self.subscription.as_ref().and_then(|s| filter_invalid_trace_handles(s.0))
     }
 
-    /// Returns the registration handle of this session if is is valid, None otherwise
-    fn registration_handle(&self) -> Option<TraceHandle> {
-        self.registration_handle.and_then(|s| filter_invalid_registration_handles(s))
+    /// Returns the current control handle if is is valid, None otherwise
+    fn control_handle(&self) -> Option<ControlHandle> {
+        self.control_handle.and_then(|s| filter_invalid_control_handles(s))
     }
 
 
@@ -194,7 +194,7 @@ impl NativeEtw {
     ///
     /// Microsoft calls this "opening" the trace (and this calls `OpenTraceW`)
     pub fn open(&mut self, trace_name: &str, callback_data: Box<Arc<CallbackData>>) -> EvntraceNativeResult<()> {
-        if self.session_handle().is_some() {
+        if self.trace_handle().is_some() {
             // That's probably possible to get multiple handles to the same trace, by opening them multiple times.
             // But that's left as a future TODO. Making things right and safe is difficult enough with a single opening of the trace already.
             return Err(EvntraceNativeError::AlreadyExist);
@@ -202,7 +202,7 @@ impl NativeEtw {
 
         let mut log_file = EventTraceLogfile::create(&callback_data, trace_name, trace_callback_thunk);
 
-        let session_handle = unsafe {
+        let trace_handle = unsafe {
             // This function modifies the data pointed to by log_file.
             // This is fine because `as_mut_ptr()` takes a `&mut self`, and its call is wraps the call to `OpenTraceA`.
             //
@@ -211,19 +211,19 @@ impl NativeEtw {
             Etw::OpenTraceW(log_file.as_mut_ptr())
         };
 
-        if filter_invalid_session_handles(session_handle).is_none() {
+        if filter_invalid_trace_handles(trace_handle).is_none() {
             Err(EvntraceNativeError::IoError(std::io::Error::last_os_error()))
         } else {
-            self.subscription = Some((session_handle, callback_data));
+            self.subscription = Some((trace_handle, callback_data));
             Ok(())
         }
     }
 
     /// Attach a provider to this trace
     pub fn enable_provider(&mut self, provider: &Provider) -> EvntraceNativeResult<()> {
-        match self.registration_handle() {
+        match self.control_handle() {
             None => Err(EvntraceNativeError::InvalidHandle),
-            Some(registration_handle) => {
+            Some(control_handle) => {
                 let owned_event_filter_descriptors: Vec<EventFilterDescriptor> = provider.filters()
                     .iter()
                     .filter_map(|filter| filter.to_event_filter_descriptor().ok()) // Silently ignoring invalid filters (basically, empty ones)
@@ -234,23 +234,23 @@ impl NativeEtw {
 
                 let res = unsafe {
                     Etw::EnableTraceEx2(
-                        registration_handle,
+                        control_handle,
                         &provider.guid() as *const GUID,
                         EVENT_CONTROL_CODE_ENABLE_PROVIDER.0,
                         provider.level(),
                         provider.any(),
                         provider.all(),
                         0,
-                        parameters.as_ptr(),
+                        Some(parameters.as_ptr()),
                     )
                 };
 
-                if res == ERROR_SUCCESS.0 {
+                if res == ERROR_SUCCESS {
                     Ok(())
                 } else {
                     Err(
                         EvntraceNativeError::IoError(
-                            std::io::Error::from_raw_os_error(res as i32)
+                            std::io::Error::from_raw_os_error(res.0 as i32)
                         )
                     )
                 }
@@ -262,7 +262,7 @@ impl NativeEtw {
     ///
     /// You probably want to spawn a thread that will block on this call.
     pub fn process(&self) -> EvntraceNativeResult<()> {
-        match self.session_handle() {
+        match self.trace_handle() {
             None => Err(EvntraceNativeError::InvalidHandle),
             Some(handle) => {
                 if let Some((_, callback_data)) = self.subscription.as_ref() {
@@ -272,10 +272,10 @@ impl NativeEtw {
                 let mut now = FILETIME::default();
                 let result = unsafe {
                     GetSystemTimeAsFileTime(&mut now);
-                    Etw::ProcessTrace(&[handle], &mut now, std::ptr::null_mut())
+                    Etw::ProcessTrace(&[handle], Some(&mut now), None)
                 };
 
-                if result == ERROR_SUCCESS.0 {
+                if result == ERROR_SUCCESS {
                     Ok(())
                 } else {
                     Err(EvntraceNativeError::IoError(std::io::Error::last_os_error()))
@@ -295,7 +295,7 @@ impl NativeEtw {
         &mut self,
         control_code: EvenTraceControl,
     ) -> EvntraceNativeResult<()> {
-        match self.registration_handle() {
+        match self.control_handle() {
             None => return Err(EvntraceNativeError::InvalidHandle),
             Some(reg_handle) => {
                 let status = unsafe {
@@ -311,15 +311,15 @@ impl NativeEtw {
                     )
                 };
 
-                if status != 0 && status != ERROR_WMI_INSTANCE_NOT_FOUND.0 {
+                if status != ERROR_SUCCESS && status != ERROR_WMI_INSTANCE_NOT_FOUND {
                     return Err(EvntraceNativeError::IoError(
-                        std::io::Error::from_raw_os_error(status as i32),
+                        std::io::Error::from_raw_os_error(status.0 as i32),
                     ));
                 }
 
                 if control_code == EVENT_TRACE_CONTROL_STOP {
-                    // Stopping the trace invalidates the session_handle
-                    self.registration_handle = None;
+                    // Stopping the trace invalidates the trace_handle
+                    self.control_handle = None;
                 }
 
                 Ok(())
@@ -332,16 +332,16 @@ impl NativeEtw {
     ///
     /// It is suggested to stop the trace immediately after `close`ing it (that's what it done in the `impl Drop`), because I'm not sure how sensible it is to call other methods (apart from `stop`) afterwards
     fn close(&mut self) -> EvntraceNativeResult<()> {
-        match self.session_handle() {
+        match self.trace_handle() {
             None => Err(EvntraceNativeError::InvalidHandle),
-            Some(session_handle) => {
+            Some(trace_handle) => {
                 let status = unsafe {
-                    Etw::CloseTrace(session_handle)
+                    Etw::CloseTrace(trace_handle)
                 };
 
-                if status != ERROR_SUCCESS.0 && status != ERROR_CTX_CLOSE_PENDING.0 {
+                if status != ERROR_SUCCESS && status != ERROR_CTX_CLOSE_PENDING {
                     Err(EvntraceNativeError::IoError(
-                        std::io::Error::from_raw_os_error(status as i32),
+                        std::io::Error::from_raw_os_error(status.0 as i32),
                     ))
                 } else {
                     self.subscription = None;
@@ -364,15 +364,17 @@ impl Drop for NativeEtw {
 
 /// Queries the system for system-wide ETW information (that does not require an active session).
 pub(crate) fn query_info(class: TraceInformation, buf: &mut [u8]) -> EvntraceNativeResult<()> {
-    match unsafe {
+    let res = unsafe {
         Etw::TraceQueryInformation(
-            0,
+            Etw::CONTROLTRACE_HANDLE(0),
             TRACE_QUERY_INFO_CLASS(class as i32),
             buf.as_mut_ptr() as *mut std::ffi::c_void,
             buf.len() as u32,
-            std::ptr::null_mut(),
+            None,
         )
-    } {
+    };
+
+    match res.0 {
         0 => Ok(()),
         e => Err(EvntraceNativeError::IoError(
             std::io::Error::from_raw_os_error(e as i32),
